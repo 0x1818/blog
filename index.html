@@ -1,1202 +1,612 @@
-
-<!DOCTYPE HTML>
-<html>
-
-<head>
-
-    <a id="back_top"></a>
-    <!-- Google Tag Manager -->
-    <script>
-        (function(w, d, s, l, i) {
-            w[l] = w[l] || [];
-            w[l].push({
-                'gtm.start': new Date().getTime(),
-                event: 'gtm.js'
-            });
-            var f = d.getElementsByTagName(s)[0],
-                j = d.createElement(s),
-                dl = l != 'dataLayer' ? '&l=' + l : '';
-            j.async = true;
-            j.src =
-                'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
-            f.parentNode.insertBefore(j, f);
-        })(window, document, 'script', 'dataLayer', 'GTM-5CM3QGF');
-    </script>
-    <!-- End Google Tag Manager -->
+# Hadoop集群HA高可用部署[2NN2RM]
 
 
 
-    <!-- Google ads Manager -->
+### 1、服务器环境及角色分配
 
-    <script data-ad-client="ca-pub-4792046100400447" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+| hostname | IP           | 配置          | **HDFS**                                           | **YARN**                     | zookeeper |
+| -------- | ------------ | ------------- | -------------------------------------------------- | ---------------------------- | --------- |
+| hadoop1  | 172.16.1.210 | 2c4g100gsata3 | NameNode、DataNode、JournalNode                    | NodeManager、ResourceManager | ZK        |
+| hadoop2  | 172.16.1.211 | 2c4g100gsata3 | NameNode、DataNode、SecondaryNameNode、JournalNode | NodeManager、ResourceManager | zk        |
+| hadoop3  | 172.16.1.212 | 2c4g100gsata3 | DataNode、JournalNode                              | NodeManager                  | zk        |
 
-    <!-- End Google ads Manager -->
+- 1.1、系统和各软件版本约定
 
+| 软件      | 版本号                     |
+| --------- | -------------------------- |
+| Hadoop    | hadoop-3.3.1               |
+| zookeeper | apache-zookeeper-3.8.0-bin |
+| os        | CentOS Stream 8            |
 
-    <!-- <base target="_blank" /> -->
+- 1.2、各节点jps进程
 
-    <link rel="dns-prefetch" href="//cdn.affdalao.com" />
-    <link rel="alternate" type="application/rss+xml" title="RSS 2.0 - 所有文章" href="https://www.kaifashuo.com/feed" />
-    <link rel="alternate" type="application/rss+xml" title="RSS 2.0 - 所有评论" href="https://www.kaifashuo.com/comments/feed" />
-
-
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-
-    <title>开发说 - 提供主机优惠信息深度测评和服务器运维编程技术</title>
-
-
-        <meta name="description" content="博客,提供主机优惠信息深度测评和服务器运维编程技术" />
-    <meta name="keywords" content="主机测评,主机优惠码,香港CN2,美国CN2,香港CN2 GIA,美国CN2 GIA,香港CN2直连,美国CN2直连,洛杉矶CN2,圣何塞CN2,圣何塞CN2 GIA,洛杉矶CN2 GIA,洛杉矶CN2直连,圣何塞CN2直连,韩国CN2,韩国CN2 GIA,新加坡CN2,新加坡CN2 GIA,新加坡CN2直连,韩国CN2直连,香港三网直连,美国三网直连,香港直连,美国直连,新加坡直连,香港PCCW直连,香港HKT,日本软银直连,大阪软银直连,东京软银直连,香港高防VPS,美国高防,洛杉矶高防,韩国高防,日本高防,新加坡高防,实惠VPS,实惠域名,实惠虚拟主机,免费活动,免费空间,免费域名,VPS使用教程,建站教程,免费资源,便宜VPS,免费VPS,云服务器,国内云服务器,国外云服务器,国外VPS,香港VPS,美国VPS,欧洲VPS,北美VPS,独立服务器,建站主机,香港云服务器,香港独立服务器,美国独立服务器,高防VPS,DDoS防御,抗投诉VPS,离岸VPS,无版权VPS,无DMCA,洛杉矶VPS,圣何塞VPS,KVM VPS,OpenVZ VPS,不限流量VPS,CN2 GIA,CN2 GT,亚洲优化线路,CN2直连,回程CN2优化,Hyper-V架构,洛杉矶CN2,圣何塞CN2直连,韩国VPS,台湾VPS,日本VPS,新加坡VPS,软银直连,双向CN2,往返CN2,VPS建站教程,XEN架构,XEN VPS,建站VPS,建站云服务器,国内独立服务器,DDoS硬防" />
-
-
-    <meta name='robots' content='max-image-preview:large' />
-<link rel='dns-prefetch' href='//cdn.jsdelivr.net' />
-<link rel='stylesheet' id='wp-block-library-css'  href='https://www.kaifashuo.com/wp-includes/css/dist/block-library/style.min.css' type='text/css' media='all' />
-<style id='global-styles-inline-css' type='text/css'>
-body{--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--duotone--dark-grayscale: url('#wp-duotone-dark-grayscale');--wp--preset--duotone--grayscale: url('#wp-duotone-grayscale');--wp--preset--duotone--purple-yellow: url('#wp-duotone-purple-yellow');--wp--preset--duotone--blue-red: url('#wp-duotone-blue-red');--wp--preset--duotone--midnight: url('#wp-duotone-midnight');--wp--preset--duotone--magenta-yellow: url('#wp-duotone-magenta-yellow');--wp--preset--duotone--purple-green: url('#wp-duotone-purple-green');--wp--preset--duotone--blue-orange: url('#wp-duotone-blue-orange');--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
-</style>
-<link rel='stylesheet' id='Katex-css'  href='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/KaTeX/katex.min.css' type='text/css' media='all' />
-<link rel='stylesheet' id='Emojify.js-css'  href='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Emojify.js/css/basic/emojify.min.css' type='text/css' media='all' />
-<link rel='stylesheet' id='prism-theme-default-css'  href='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/themes/prism.css' type='text/css' media='all' />
-<link rel='stylesheet' id='prism-plugin-toolbar-css'  href='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/plugins/toolbar/prism-toolbar.css' type='text/css' media='all' />
-<link rel='stylesheet' id='prism-plugin-line-numbers-css'  href='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/plugins/line-numbers/prism-line-numbers.css' type='text/css' media='all' />
-<link rel="https://api.w.org/" href="https://www.kaifashuo.com/wp-json/" /><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://www.kaifashuo.com/xmlrpc.php?rsd" />
-<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://www.kaifashuo.com/wp-includes/wlwmanifest.xml" /> 
-<meta name="generator" content="WordPress 5.9.3" />
+| hostname | jps进程                                                      |
+| -------- | ------------------------------------------------------------ |
+| hadoop1  | QuorumPeerMain<br/>DFSZKFailoverController<br/>JournalNode<br/> Jps<br/>NodeManager<br/>NameNode<br/>DataNode<br/>ResourceManager |
+| hadoop2  | NodeManager<br/>ResourceManager<br/> JournalNode<br/>Jps<br/>NameNode<br/>QuorumPeerMain<br/>DataNode<br/>DFSZKFailoverController |
+| hadoop3  | NodeManager<br/> JournalNode<br/>QuorumPeerMain<br/>DataNode<br/>Jps |
 
 
 
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.0/dist/js/bootstrap.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.14.0/css/all.min.css">
-    <link href="https://www.kaifashuo.com/wp-content/themes/wpcard/style.css" rel="stylesheet">
+### 2、服务器免密配置
+
+```bash
+# 生成ssh 密钥对,一路回车，不输入密码
+[root@hadoop1 ~]# ssh-keygen -t rsa
+
+# 把本地的ssh公钥文件安装到远程主机对应的账户
+ssh-copy-id -i .ssh/id_rsa.pub hadoop1
+ssh-copy-id -i .ssh/id_rsa.pub hadoop2
+ssh-copy-id -i .ssh/id_rsa.pub hadoop3
+
+# 因为namenode仲裁时需要用到sshfence，所以各服务器之间需要免密登录
+
+scp /root/.ssh/id_rsa hadoop1:/root/.ssh/id_rsa
+scp /root/.ssh/id_rsa hadoop2:/root/.ssh/id_rsa
+scp /root/.ssh/id_rsa hadoop3:/root/.ssh/id_rsa
+
+# 3台服务器配置主机名
+
+cat >> /etc/hosts <<EOF
+172.16.1.210 hadoop1
+172.16.1.211 hadoop2
+172.16.1.212 hadoop3
+EOF
+
+# 配置Hadoop环境变量
+
+vi /etc/profile
+
+export HADOOP_HOME=/data/hadoop-3.3.1
+export PATH=$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$PATH
+export HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib:$HADOOP_HOME/lib/native"
+
+source /etc/profile
+```
+
+### 3、安装JDK
+
+```bash
+# 此软件会提供jps命令，如果不确定什么软件包可提供此命令，可以使用yum provides jps或yum provides */jps
+yum install java-1.8.0-openjdk-devel -y
+
+yum install java-11-openjdk-devel -y
+
+# 验证Java安装是否正常
+java -version
+
+# 安装psmisc，因为namenode仲裁时需要用到sshfence，所以此软件的fuser配合。
+
+yum -y install psmisc
+```
 
 
-    <!--<script src="https://cdn.bootcss.com/jquery/3.4.1/jquery.min.js"></script>
-    <script src="https://cdn.bootcss.com/jquery_lazyload/1.9.7/jquery.lazyload.min.js"></script>
 
-    <script src="https://cdn.bootcss.com/popper.js/1.15.0/esm/popper.min.js"></script>
-    <script src="https://cdn.bootcss.com/twitter-bootstrap/4.3.1/js/bootstrap.min.js"></script>
+### 4、安装zookeeper集群
 
-    <link href="https://cdn.bootcss.com/twitter-bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+```bash
+cd /data
+
+wget https://dlcdn.apache.org/zookeeper/zookeeper-3.8.0/apache-zookeeper-3.8.0-bin.tar.gz
+
+tar xf apache-zookeeper-3.8.0-bin.tar.gz
+
+# 创建zookeeper数据目录和第一次启动的myid文件,每个节点的id值不一样，节点1的myid为1、节点2的myid为2、以此类推。
+
+mkdir -p /data/apache-zookeeper-3.8.0-bin/data
+
+echo 1 >/data/apache-zookeeper-3.8.0-bin/data/myid
+
+# 修改zookeeper配置文件
+cd  /data/apache-zookeeper-3.8.0-bin/conf
+
+cp zoo_sample.cfg zoo.cfg
+
+vi zoo.cfg
+
+dataDir=/data/apache-zookeeper-3.8.0-bin/data
+dataLogDir=/data/apache-zookeeper-3.8.0-bin/logs
+# 3台节点
+server.1=hadoop1:2888:3888
+server.2=hadoop2:2888:3888
+server.3=hadoop3:2888:3888
+
+
+# 加入zookeeper到环境变量
+export PATH=$PATH:/data/apache-zookeeper-3.8.0-bin/bin
+source /etc/profile
+
+# 拷贝zookeeper到其他节点，注意要修改myid的值
+
+cd /data
+
+scp -r apache-zookeeper-3.8.0-bin  hadoop2:/$(pwd)
+echo 2 >/data/apache-zookeeper-3.8.0-bin/data/myid
+
+scp -r apache-zookeeper-3.8.0-bin  hadoop2:/$(pwd)
+echo 3 >/data/apache-zookeeper-3.8.0-bin/data/myid
+
+# zookeeper启动和停止以及leader查看命令
+启动：zkServer.sh start
+停止： zkServer.sh stop
+查看leader状态：zkServer.sh status
+
+[root@hadoop1 data]# zkServer.sh status
+/usr/bin/java
+ZooKeeper JMX enabled by default
+Using config: /data/apache-zookeeper-3.8.0-bin/bin/../conf/zoo.cfg
+Client port found: 2181. Client address: localhost. Client SSL: false.
+Mode: follower/leader  【判断此节点是follower还是leader节点】
+```
+
+
+
+### 5、下载Hadoop二进制软件包并解压
+
+```bash
+cd /data
+
+wget https://dlcdn.apache.org/hadoop/common/hadoop-3.3.1/hadoop-3.3.1.tar.gz
+
+tar xf hadoop-3.3.1.tar.gz
+
+```
+
+
+
+### 6、配置Hadoop并启动，需要修改的配置文件为workers、core-site.xml、[hdfs](https://so.csdn.net/so/search?q=hdfs&spm=1001.2101.3001.7020)-site.xml、mapred-site.xml、yarn-site.xml
+
+```bash
+# 进入Hadoop配置目录
+
+cd /data/hadoop-3.3.1/etc/hadoop
+
+# 1、修改hadoop-env.sh 添加如下内容
+
+export  JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.322.b06-2.el8_5.x86_64
+
+export HDFS_NAMENODE_USER=root
+export HDFS_DATANODE_USER=root
+export HDFS_SECONDARYNAMENODE_USER=root
+export YARN_RESOURCEMANAGER_USER=root
+export YARN_NODEMANAGER_USER=root
+export HDFS_JOURNALNODE_USER=root
+export HDFS_ZKFC_USER=root
+
+# 2、修改核心模块配置文件core-site.xml
+
+<configuration>
+
+
+	<property>
+    		<name>fs.defaultFS</name>
+    		<value>hdfs://ns</value>
+    		<!-- 这里定义参与federation的子集群别名 -->
+	</property>
+
+
+	<!-- 指定hadoop运行时产生文件的存储目录 -->
+	<property>
+		<name>hadoop.tmp.dir</name>
+		<value>/data/hdata/tmp</value>
+	</property>
+	<!-- 指定hadoop WEB UI 用户身份 -->
+        <property>
+                <name>hadoop.http.staticuser.user</name>
+                <value>root</value>
+        </property>
+
+	<!-- 设置Hadoop的代理用户 -->
+	<property>
+		<name>hadoop.proxyuser.root.hosts</name>
+		<value>*</value>
+	</property>
+
+        <property>
+                <name>hadoop.proxyuser.root.groups</name>
+                <value>*</value>
+        </property>
+
+        <!-- 文件系统垃圾桶保存时间 -->
+        <property>
+                <name>fs.trash.interval</name>
+                <value>1440</value>
+        </property>
+
+ 	<!--指定zookeeper地址-->
+ 	<property>
+      		<name>ha.zookeeper.quorum</name>
+      		<value>hadoop1:2181,hadoop2:2181,hadoop3:2181</value>
+ 	</property>
+
+</configuration>
+
+# 3、修改hdfs文件系统模块配置：hdfs-site.xml
+
+<configuration>
+
+	<!-- 指定HDFS副本的数量，默认为3个 -->
+	<property>
+		<name>dfs.replication</name>
+		<value>3</value>
+	</property>
+
+	<property>
+    		<name>dfs.nameservices</name>
+    		<value>ns</value>
+    		<!-- 这里定义参与federation的子集群别名与core-site.xml对应 -->
+	</property>
+	
+	<property>
+    		<name>dfs.ha.namenodes.ns</name>
+    		<value>nn1,nn2</value>
+    		<!-- 这里定义ns的namenode名称，自定义与下面相对应 -->
+  	</property>
+
+	<property>
+    		<name>dfs.namenode.rpc-address.ns.nn1</name>
+    		<value>hadoop1:8020</value>
+	</property>
+
+	<property>
+    		<name>dfs.namenode.http-address.ns.nn1</name>
+    		<value>hadoop1:9870</value>
+	</property>
+
+        <property>
+                <name>dfs.namenode.rpc-address.ns.nn2</name>
+                <value>hadoop2:8020</value>
+        </property>
+
+        <property>
+                <name>dfs.namenode.http-address.ns.nn2</name>
+                <value>hadoop2:9870</value>
+        </property>
+
+	<!-- 开启NameNode故障时自动切换 -->
+    	<property>
+        	<name>dfs.ha.automatic-failover.enabled</name>
+        	<value>true</value>
+    	</property>
+    	<!-- 配置失败自动切换实现方式 -->
+    	<property>
+            	<name>dfs.client.failover.proxy.provider.ns</name>
+            	<value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+    	</property>
+    	<!-- 配置隔离机制，如果ssh是默认22端口，value直接写sshfence即可【这里为了保险加了两个，测试过sshfence，不能故障转移】 -->
+    	<property>
+            	<name>dfs.ha.fencing.methods</name>
+             	<value>
+					sshfence
+					shell(/bin/true)
+				</value>
+    	</property>
+
+
+	<!-- 使用隔离机制时需要ssh免登陆 -->
+	<property>
+		<name>dfs.ha.fencing.ssh.private-key-files</name>
+		<value>/root/.ssh/id_rsa</value>
+	</property>
+
+
+
+    	<!-- 指定NameNode的元数据在JournalNode上的存放位置，建议奇数个节点和zookeeper一样 -->
+    	<property>
+         	<name>dfs.namenode.shared.edits.dir</name>
+         	<value>qjournal://hadoop1:8485;hadoop2:8485;hadoop3:8485/ns</value>
+    	</property>
+    	<!-- 指定JournalNode在本地磁盘存放数据的位置 -->
+    	<property>
+        	<name>dfs.journalnode.edits.dir</name>
+        	<value>/data/hdata/journal</value>
+    	</property>
+
+</configuration>
+
+# 4、修改MapReduce模块配置：mapred-site.xml
+
+<configuration>
+
+	<property>
+		<name>mapreduce.framework.name</name>
+		<value>yarn</value>
+	</property>
+	
+	<!-- yarn的环境变量 -->
+
+	<property>
+		<name>yarn.app.mapreduce.am.env</name>
+		<value>HADOOP_MAPRED_HOME=${HADOOP_HOME}</value>
+	</property>
+
+	<property>
+
+		<name>mapreduce.map.env</name>
+		<value>HADOOP_MAPRED_HOME=${HADOOP_HOME}</value>
+	
+	</property>
+
+	<property>		
+		<name>mapreduce.reduce.env</name>
+		<value>HADOOP_MAPRED_HOME=${HADOOP_HOME}</value>
+	
+	</property>
+
+</configuration>
+
+# 5、修改yarn模块配置：yarn-site.xml
+
+<configuration>
+
+<!-- Site specific YARN configuration properties -->
+
+
+        <property>
+                <name>yarn.nodemanager.aux-services</name>
+                <value>mapreduce_shuffle</value>
+        </property>
+
+
+        <!--是否对容器实施物理内存限制 -->
+        <property>
+                <name>yarn.nodemanager.pmem-check-enabled</name>
+                <value>false</value>
+        </property>
+
+        <!-- 是否对容器实施虚拟内存限制 -->
+
+        <property>
+                <name>yarn.nodemanager.vmem-check-enabled</name>
+                <value>false</value>
+        </property>
+
+        <!-- 开启日志聚集 -->
+
+        <property>
+                <name>yarn.log-aggregation-enable</name>
+                <value>true</value>
+        </property>
+
+
+        <!-- 历史日志保留的时间7天 -->
+
+        <property>
+                <name>yarn.log-aggregation.retain-seconds</name>
+                <value>604800</value>
+        </property>
+
+
+	<!-- yarn ha 高可用配置，是否开启高可用 -->
+	<property>
+　　　　	<name>yarn.resourcemanager.ha.enabled</name>
+　　　　	<value>true</value>
+　　	</property>
+　　	
+　　	<!-- yarn ha 高可用配置，设置集群id -->
+　　	<property>
+　　　　	<name>yarn.resourcemanager.cluster-id</name>
+　　　　	<value>cluster1</value>
+　　	</property>
+　　	
+　　	<!-- yarn ha 高可用配置，设置rm id ,自定义，与下面相对应 -->
+　　	<property>
+　　　　	<name>yarn.resourcemanager.ha.rm-ids</name>
+　　　　	<value>rm1,rm2</value>
+　　	</property>
+　　	<property>
+　　　　	<name>yarn.resourcemanager.hostname.rm1</name>
+　　　　	<value>hadoop1</value>
+　　	</property>
+　　	<property>
+　　　　	<name>yarn.resourcemanager.hostname.rm2</name>
+　　　　	<value>hadoop2</value>
+　　	</property>
+　　	<property>
+　　　　	<name>yarn.resourcemanager.webapp.address.rm1</name>
+　　　　	<value>hadoop1:8088</value>
+　　	</property>
+　　	<property>
+　　　　	<name>yarn.resourcemanager.webapp.address.rm2</name>
+　　　　	<value>hadoop2:8088</value>
+　　	</property>
+　　	
+　　	<!-- yarn ha 高可用配置，zookeeper 配置 -->
+　　	<property>
+　　　　	<name>hadoop.zk.address</name>
+　　　　	<value>hadoop1:2181,hadoop2:2181,hadoop3:2181</value>
+　　	</property>
+
+</configuration>
+# 6、修改workers文件，配置任务运行机器
+[root@hadoop1 hadoop]# vi workers 
+hadoop1
+hadoop2
+hadoop3
+
+```
+
+
+
+### 7、Hadoop的初次启停命令【有顺序】
+
+```bash
+1、首先启动各个节点的Zookeeper，在各个节点上执行以下命令【jps查看进程为：QuorumPeerMain】：
+zkServer.sh start
+
+2、在某一个namenode节点执行如下命令，创建命名空间
+
+hdfs zkfc -formatZK
+
+3、在每个journalnode节点用如下命令启动journalnode【按规划是三台节点都启动，jps查看进程为：JournalNode】
+
+hdfs --daemon start journalnode
+
+4、在主namenode节点格式化namenode和journalnode目录
+
+hdfs namenode -format ns
+
+5、在主namenode节点启动namenode进程，【jps查看进程为：NameNode】
+
+hdfs --daemon start namenode  
+
+6、在备namenode节点执行第一行命令，这个是把备namenode节点的目录格式化并把元数据从主namenode节点copy过来，并且这个命令不会把journalnode目录再格式化了！然后用第二个命令启动备namenode进程！
+
+hdfs namenode -bootstrapStandby
+hdfs --daemon start namenode
+
+7、在两个namenode【hadoop1和Hadoop2】节点都执行以下命令，【jps查看进程为：DFSZKFailoverController】
+
+hdfs --daemon start zkfc
+
+8、在所有datanode节点都执行以下命令启动datanode，【jps查看进程为：DataNode】
+
+hdfs --daemon start datanode
+
+9、在两个resourcemanager节点启动yarn，【jps查看进程为：ResourceManager】
+
+yarn --daemon start resourcemanager
+
+yarn --daemon stop resourcemanager
+
+```
+
+
+
+### 8、Hadoop模块启停命令
+
+
+```bash
+# 1、启动所有模块命令【会启动除zookeeper进程以外的所有Hadoop服务】： start-all.sh
+
+# 2、停止所有模块命令【会停止除zookeeper进程以外的所有Hadoop服务】：stop-all.sh
+
+# 3、分模块启停命令：
+hdfs模块启停（start-dfs.sh/stop-dfs.sh）
+yarn模块启停（start-yarn.sh/stop-yarn.sh）
+
+# 4、Hadoop历史服务器启动，可以查看MapReduce的执行历史
+mr-jobhistory-daemon.sh start historyserver
+mr-jobhistory-daemon.sh stop historyserver
+
+# 暴力停止Hadoop集群【不推荐，可能会丢失数据】：
+
+jps |grep -iv jps |awk '{print $1}' |xargs kill -9
+
+```
+
+
+
+### 9、Hadoop集群测试
+
+- hdfs测试
+
+  ```bash
+  # 上传测试：
+  hadoop  fs -put CentOS-8.5.2111-x86_64-boot.iso  /
+  
+  # 查看
+  [root@hadoop1 data]# hadoop fs -ls /
+  Found 3 items
+  -rw-r--r--   3 root supergroup  827326464 2022-03-18 14:52 /CentOS-8.5.2111-x86_64-boot.iso
+  drwx------   - root supergroup          0 2022-03-19 10:29 /tmp
+  drwxr-xr-x   - root supergroup          0 2022-03-07 10:23 /user
+  
+  # 下载测试：
+  hadoop fs -get /CentOS-8.5.2111-x86_64-boot.iso  .
+  
+  ```
+
   
 
-    -->
-
-
-    <style>
-        .carousel-inner img {
-            width: 100%;
-            height: 300px;
-        }
-    </style>
-
-</head>
-
-<body>
-
-    <!-- Google Tag Manager (noscript) -->
-    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5CM3QGF" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-    <!-- End Google Tag Manager (noscript) -->
-
-    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom box-shadow">
-
-        <li class="nav-item">
-            <a href="/" style="font-size:1.8em;">开发说</a>
-        </li>
-
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarToggler" aria-controls="navbarToggler" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-
-        <div class="collapse navbar-collapse" id="navbarToggler">
-            <ul class="navbar-nav mr-auto ml-auto mt-2 mt-lg-0">
-
-                
-                    
-                        <nav id="site-navigation" class="main-navigation" role="navigation" aria-label="Primary Menu">
-                            <div id="menu-menu" class="menu-menu-container"><ul id="menu-menu"class="s"><li id="menu-item-2291" class="menu-item menu-item-type-custom menu-item-object-custom current-menu-item menu-item-home menu-item-2291"><a href="https://www.kaifashuo.com/">首页</a></li>
-<li id="menu-item-2256" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-has-children menu-item-2256"><a href="https://www.kaifashuo.com/hostoffer" data-toggle="dropdown" class="dropdown-toggle">主机优惠 </a><ul class="dropdown-menu list-unstyled">	<li id="menu-item-319" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-319"><a href="https://www.kaifashuo.com/vps">VPS优惠</a></li>
-	<li id="menu-item-926" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-926"><a href="https://www.kaifashuo.com/dedicated">独服优惠</a></li>
-	<li id="menu-item-361" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-361"><a href="https://www.kaifashuo.com/usehost">自用主机</a></li>
-</ul>
-</li>
-<li id="menu-item-200" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-has-children menu-item-200"><a href="https://www.kaifashuo.com/wiki" data-toggle="dropdown" class="dropdown-toggle">系统运维 </a><ul class="dropdown-menu list-unstyled">	<li id="menu-item-2268" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2268"><a href="https://www.kaifashuo.com/centos">Centos</a></li>
-	<li id="menu-item-2269" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2269"><a href="https://www.kaifashuo.com/nginx">Nginx</a></li>
-	<li id="menu-item-2260" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2260"><a href="https://www.kaifashuo.com/mariadb">MariaDB</a></li>
-	<li id="menu-item-2261" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2261"><a href="https://www.kaifashuo.com/php">PHP</a></li>
-	<li id="menu-item-2267" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2267"><a href="https://www.kaifashuo.com/tools">Tools</a></li>
-</ul>
-</li>
-<li id="menu-item-2242" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-has-children menu-item-2242"><a href="https://www.kaifashuo.com/bigdata" data-toggle="dropdown" class="dropdown-toggle">大数据 </a><ul class="dropdown-menu list-unstyled">	<li id="menu-item-2262" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2262"><a href="https://www.kaifashuo.com/ansible">Ansible</a></li>
-	<li id="menu-item-2258" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2258"><a href="https://www.kaifashuo.com/clickhouse">ClickHouse</a></li>
-	<li id="menu-item-2263" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2263"><a href="https://www.kaifashuo.com/docker">Docker</a></li>
-	<li id="menu-item-2270" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2270"><a href="https://www.kaifashuo.com/golang">Golang</a></li>
-	<li id="menu-item-2346" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2346"><a href="https://www.kaifashuo.com/hadoop">Hadoop</a></li>
-	<li id="menu-item-2309" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2309"><a href="https://www.kaifashuo.com/bigdata/kubernetes">Kubernetes</a></li>
-	<li id="menu-item-2281" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2281"><a href="https://www.kaifashuo.com/kafka">Kafka</a></li>
-	<li id="menu-item-2271" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2271"><a href="https://www.kaifashuo.com/zabbix">Zabbix</a></li>
-	<li id="menu-item-2282" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2282"><a href="https://www.kaifashuo.com/zookeeper">Zookeeper</a></li>
-</ul>
-</li>
-<li id="menu-item-2273" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-has-children menu-item-2273"><a href="https://www.kaifashuo.com/cdn" data-toggle="dropdown" class="dropdown-toggle">CDN </a><ul class="dropdown-menu list-unstyled">	<li id="menu-item-2265" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2265"><a href="https://www.kaifashuo.com/ats">Apache Traffic Server</a></li>
-	<li id="menu-item-2274" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2274"><a href="https://www.kaifashuo.com/varnish">Varnish</a></li>
-</ul>
-</li>
-<li id="menu-item-2266" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-has-children menu-item-2266"><a href="https://www.kaifashuo.com/dns" data-toggle="dropdown" class="dropdown-toggle">DNS </a><ul class="dropdown-menu list-unstyled">	<li id="menu-item-2276" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2276"><a href="https://www.kaifashuo.com/bind">Bind</a></li>
-	<li id="menu-item-2277" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2277"><a href="https://www.kaifashuo.com/powerdns">PowerDNS</a></li>
-	<li id="menu-item-2278" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-2278"><a href="https://www.kaifashuo.com/nsd">NSD</a></li>
-</ul>
-</li>
-<li id="menu-item-747" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-747"><a href="https://www.kaifashuo.com/themes">自用主题</a></li>
-<li id="menu-item-1245" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1245"><a href="https://www.kaifashuo.com/cluster">本站架构</a></li>
-<li id="menu-item-203" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-203"><a href="https://www.kaifashuo.com/default">闲言碎语</a></li>
-</ul></div>                        </nav><!-- .main-navigation -->
-                                    
-                
-            </ul>
-
-
-            <form class="form-inline ml-2 my-lg-0" action="/">
-                <input name="s" class="form-control mr-sm-2" type="search" placeholder="Search">
-            </form>
-
-        </div>
-
-    </nav>
-
-    <div class="container">
-
-
-<div class="row" id="home_banner">
-
-    <div class="col-md-12 col-xs-12 mt-4">
-
-        <div id="demo" class="carousel slide" data-ride="carousel">
-
-            <!-- 指示符 -->
-            <ul class="carousel-indicators">
-                <li data-target="#demo" data-slide-to="0" class="active"></li>
-                <li data-target="#demo" data-slide-to="1"></li>
-                <li data-target="#demo" data-slide-to="2"></li>
-            </ul>
-
-            <!-- 轮播图片 -->
-            <div class="carousel-inner">
-                <div class="carousel-item active">
-                    <a href="/182.html" target="_blank"> <img src="https://www.kaifashuo.com/wp-content/uploads/static/images/banner1.jpg"></a>
-                    <div class="carousel-caption">
-
-                        <a href="/182.html" target="_blank">
-                            <h2 class="text-white">基于SSL实现Mysql加密的主从复制配置</h2>
-                        </a>
-                    </div>
-                </div>
-                <div class="carousel-item">
-                    <a href="/635.html" target="_blank"> <img src="https://www.kaifashuo.com/wp-content/uploads/static/images/banner2.jpg"></a>
-                    <div class="carousel-caption">
-                        <a href="/635.html" target="_blank">
-                            <h2 class="text-white"> 如何建立Varnish CDN集群</h2>
-                        </a>
-                    </div>
-                </div>
-                <div class="carousel-item" target="_blank">
-                    <a href="/157.html" target="_blank"> <img src="https://www.kaifashuo.com/wp-content/uploads/static/images/banner3.jpg"></a>
-                    <div class="carousel-caption">
-
-                        <a href="/157.html" target="_blank">
-                            <h2 class="text-white">基于运营商的分布式DNS搭建</h2>
-                        </a>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- 轮播图片结束 -->
-
-        </div>
-    </div>
-
-
-                <div class="col-xs-12 col-md-4 mt-4">
-            <div class="card mb-2 box-shadow">
-
-                <div class="card-body">
-
-                    <a href="https://www.kaifashuo.com/1162.html"><img  class="timg" src="https://www.kaifashuo.com/wp-content/uploads/2019/08/zabbix.png"/></a>
-
-                </div>
-                <div class="card-header">
-                    <h6>
-                        <b> <a href="https://www.kaifashuo.com/1162.html" title="安装Zabbix监控服务器及邮件/短信/微信报警" target="_blank">安装Zabbix监控服务器及邮件/短信/微信报警</a></b>
-                    </h6>
-
-                </div>
-
-            </div>
-        </div>
-
-
-            <div class="col-xs-12 col-md-4 mt-4">
-            <div class="card mb-2 box-shadow">
-
-                <div class="card-body">
-
-                    <a href="https://www.kaifashuo.com/1016.html"><img  class="timg" src="https://www.kaifashuo.com/wp-content/uploads/2019/05/photo_2019-05-27_02-03-19.jpg"/></a>
-
-                </div>
-                <div class="card-header">
-                    <h6>
-                        <b> <a href="https://www.kaifashuo.com/1016.html" title="博客实现DDOS攻击秒级切换至高防服务器" target="_blank">博客实现DDOS攻击秒级切换至高防服务器</a></b>
-                    </h6>
-
-                </div>
-
-            </div>
-        </div>
-
-
-            <div class="col-xs-12 col-md-4 mt-4">
-            <div class="card mb-2 box-shadow">
-
-                <div class="card-body">
-
-                    <a href="https://www.kaifashuo.com/56.html"><img  class="timg" src="https://www.kaifashuo.com/wp-content/uploads/2017/11/dropbox.jpg"/></a>
-
-                </div>
-                <div class="card-header">
-                    <h6>
-                        <b> <a href="https://www.kaifashuo.com/56.html" title="VPS脚本自动备份数据到Dropbox" target="_blank">VPS脚本自动备份数据到Dropbox</a></b>
-                    </h6>
-
-                </div>
-
-            </div>
-        </div>
-
-
-    
-    
-</div>
-
-<div class="article-seperator" id="home_banner_line"></div>
-
-<a id="page_top"></a>
-<div class="row  mt-4">
-
-    <div class="col-xs-12 col-md-9">
-
-        
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2337.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2022/03/微信截图_20220320091335.png"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/hadoop" rel="category tag">Hadoop</a></li>
-	<li><a href="https://www.kaifashuo.com/bigdata" rel="category tag">大数据</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2337.html" title="Hadoop集群安装"  target="_blank">Hadoop集群安装</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">Hadoop是一个由Apache基金会所开发的分布式系统基础架构。用户可以在不了解分布式底层细节的情况下，开发分布式程序。充分利用集群的威力进行高速运算和存储。Hadoop实现了一个分布式文件系统（ Distributed File System），其中一个组件是HDFS（Hadoop Distributed File&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2022年03月20日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 54 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2337.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/hadoop" rel="tag">Hadoop</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2325.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2019/09/centos.png"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/centos" rel="category tag">Centos</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2325.html" title="Centos服务器性能瓶颈定位分析【硬件篇】"  target="_blank">Centos服务器性能瓶颈定位分析【硬件篇】</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">最近一直在用朋友买的ks-le [配置：4c 32G 4T 100M] 做实验，包括k8s/kafka/hadoop等一些实验，使用PVE开出三台 2c4g100g SATA3 配置，其中一台最近登录ssh都会很卡，借此机会聊聊Centos服务器性能瓶颈定位分析，分别从 系统负载/CPU/内存/硬盘/网络 方面进行分析&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2022年03月05日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 64 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2325.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/centos" rel="tag">centos</a> · <a href="https://www.kaifashuo.com/tag/%e6%80%a7%e8%83%bd%e5%88%86%e6%9e%90" rel="tag">性能分析</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2322.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2020/11/屏幕截图-2020-11-08-231047.png"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/kafka" rel="category tag">Kafka</a></li>
-	<li><a href="https://www.kaifashuo.com/zookeeper" rel="category tag">Zookeeper</a></li>
-	<li><a href="https://www.kaifashuo.com/bigdata" rel="category tag">大数据</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2322.html" title="Kafka-3.1.0集群搭建(Kraft模式)"  target="_blank">Kafka-3.1.0集群搭建(Kraft模式)</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">以前写过一篇Kafka结合zookeeper组件集群，最近Kafka发布了3.x版本，不在需要zookeeper也可以完成集群搭建，测试一下。 kafka分布式消息队列部署 zookeeper单机和集群部署 1、服务器环境 2、安装JDK，JDK会提供 jps 命令，来查看相关的Kafka进程 ps -ef |grep&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2022年03月05日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 79 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2322.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/kafka" rel="tag">kafka</a> · <a href="https://www.kaifashuo.com/tag/zookeeper" rel="tag">zookeeper</a> · <a href="https://www.kaifashuo.com/tag/%e5%a4%a7%e6%95%b0%e6%8d%ae" rel="tag">大数据</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2319.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2018/01/th-1.jpg"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/mariadb" rel="category tag">MariaDB</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2319.html" title="MySQL升级报错解决办法"  target="_blank">MySQL升级报错解决办法</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">前两天看到MariaDB发布了10.8RC1就更新源把博客的MariaDB从10.7升级到10.8RC，博客正常访问，也没在意，今天发现VPS硬盘使用率大幅上升，然后就排查了一下，发现是MariaDB错误日志比较大。 1、排查思路：先用du -h统计磁盘使用率，再用 du -h --max-depth / 逐级定位文件&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2022年03月05日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 35 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2319.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/mysql" rel="tag">mysql</a> · <a href="https://www.kaifashuo.com/tag/%e6%95%b0%e6%8d%ae%e5%ba%93" rel="tag">数据库</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2312.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2021/10/屏幕截图-2021-10-04-220129.png"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/vps" rel="category tag">VPS优惠</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2312.html" title="Debian11配置静态IPV6地址与apt包管理工具使用"  target="_blank">Debian11配置静态IPV6地址与apt包管理工具使用</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">debian11出来也很久了，就买个一只只有IPV6得0.49欧元/月的小鸡，装了个debian11体验一下 Debian和Redhat系得包管理工具不一样，网卡设置也不一样，Debian系包管理工具为apt对应Redhat系的yum，Debian系的dpkg对应Redhat系的rpm root@debian11:~#&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2021年10月04日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 410 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2312.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/debian" rel="tag">Debian</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2310.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/static/images/d5.png"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/ats" rel="category tag">Apache Traffic Server</a></li>
-	<li><a href="https://www.kaifashuo.com/cdn" rel="category tag">CDN</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2310.html" title="使用Dockerfile定制ATS的docker镜像"  target="_blank">使用Dockerfile定制ATS的docker镜像</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">在CDN技术中比较常见的软件有ATS，varnish和squid三款，以前博客写了一篇关于varnish的博文，参考：如何建立Varnish CDN集群 ，使用Varnish从内存加速你的WordPress网站，今天用ansible的playbook功能批量部署ATS缓存（四台小鸡） 参考：https://qing.s&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2021年08月21日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 339 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2310.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/ats" rel="tag">ats</a> · <a href="https://www.kaifashuo.com/tag/docker" rel="tag">docker</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2287.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2020/11/屏幕截图-2020-11-08-231047.png"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/kafka" rel="category tag">Kafka</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2287.html" title="kafka分布式消息队列部署"  target="_blank">kafka分布式消息队列部署</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">Kafka是由Apache软件基金会开发的一个开源流处理平台，由Scala和Java编写。Kafka是一种高吞吐量的分布式发布订阅消息系统，它可以处理消费者在网站中的所有动作流数据。 这种动作（网页浏览，搜索和其他用户的行动）是在现代网络上的许多社会功能的一个关键因素。 这些数据通常是由于吞吐量的要求而通过处理日志和日&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2020年11月08日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 647 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2287.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/kafka" rel="tag">kafka</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2284.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2020/11/屏幕截图-2020-11-08-224537.png"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/zookeeper" rel="category tag">Zookeeper</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2284.html" title="zookeeper单机和集群部署"  target="_blank">zookeeper单机和集群部署</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">官方文档上这么解释zookeeper，它是一个分布式服务框架，是Apache Hadoop 的一个子项目，它主要是用来解决分布式应用中经常遇到的一些数据管理问题，如：统一命名服务、状态同步服务、集群管理、分布式应用配置项的管理等。 上面的解释有点抽象，简单来说zookeeper=文件系统+监听通知机制。 一、zooke&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2020年11月08日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 504 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2284.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2251.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2019/09/centos.png"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/tools" rel="category tag">Tools</a></li>
-	<li><a href="https://www.kaifashuo.com/wiki" rel="category tag">系统运维</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2251.html" title="多线程下载工具mwget和axel安装使用"  target="_blank">多线程下载工具mwget和axel安装使用</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">在Centos中常用的下载工具无非只有wget和curl，基于单线程要想获得更快的下载的速度充分的享受G口带宽的快感，则需要用到mwget和axel 1、mwget安装与使用： ###mwget官方地址：http://sourceforge.net/projects/kmphpfm/?source=dlp ###依赖包&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2020年10月09日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 1,012 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2251.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/%e6%8a%80%e6%9c%af%e5%b9%b2%e8%b4%a7" rel="tag">技术干货</a> · <a href="https://www.kaifashuo.com/tag/%e6%9c%8d%e5%8a%a1%e5%99%a8" rel="tag">服务器</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2243.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2020/10/屏幕截图-2020-10-09-223520.png"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/clickhouse" rel="category tag">ClickHouse</a></li>
-	<li><a href="https://www.kaifashuo.com/bigdata" rel="category tag">大数据</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2243.html" title="Clickhouse概述安装使用与性能测试"  target="_blank">Clickhouse概述安装使用与性能测试</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">自从ClickHouse2016年6月15日开源后，ClickHouse中文社区随后成立。中文开源组开始以易观，海康威视,美团，新浪，京东,58,腾讯,酷狗音乐和俄罗斯开源社区等人员组成，随着开源社区的不断活跃，陆续有神州数码，青云，PingCAP，中软国际等公司成员加入以及其他公司成员加入。 Clickhouse官方&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2020年10月09日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 796 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2243.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/clickhouse" rel="tag">clickHouse</a> · <a href="https://www.kaifashuo.com/tag/%e5%a4%a7%e6%95%b0%e6%8d%ae" rel="tag">大数据</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2203.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2020/07/批注-2020-07-25-210649.jpg"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/bind" rel="category tag">Bind</a></li>
-	<li><a href="https://www.kaifashuo.com/dns" rel="category tag">DNS</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2203.html" title="使用bind部署DNS主从分运营商解析域名"  target="_blank">使用bind部署DNS主从分运营商解析域名</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">以前博文写过几篇假设DNS服务的博文，今天结合ATS和分运营商解析域名，实现建议CDN功能 利用NSD配置DNS主从解析域名及报错处理 利用powerdns自建DNS服务器 基于运营商的分布式DNS搭建 自建DNS权威服务器全过程（多域名解析） 假定： 主DNS节点的IP为1.1.1.1 从DNS节点的IP为2.2.2&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2020年07月25日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 881 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2203.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/bind" rel="tag">bind</a> · <a href="https://www.kaifashuo.com/tag/cdn" rel="tag">CDN</a> · <a href="https://www.kaifashuo.com/tag/dns" rel="tag">dns</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-
-                <div class="card mb-4 box-shadow">
-
-                    <div class="card-body">
-                        <div class="row  mt-2">
-
-                            <div class="col-xs-12 col-md-3 page_img">
-
-
-                                <a href="https://www.kaifashuo.com/2194.html"><img   class="timg"  src="https://www.kaifashuo.com/wp-content/uploads/2020/07/批注-2020-07-16-000020.jpg"/></a>
-
-                                <ul class="post-categories">
-	<li><a href="https://www.kaifashuo.com/ansible" rel="category tag">Ansible</a></li>
-	<li><a href="https://www.kaifashuo.com/ats" rel="category tag">Apache Traffic Server</a></li></ul>                            </div>
-
-                            <div class="col-xs-12 col-md-9 mt-2">
-
-                                <h5>
-                                    <b><a href="https://www.kaifashuo.com/2194.html" title="使用ansible的playbook批量部署Apache Traffic Server[4只小鸡]"  target="_blank">使用ansible的playbook批量部署Apache Traffic Server[4只小鸡]</a></b>
-                                </h5>
-
-
-                                <p class="mt-3 text-secondary">在CDN技术中比较常见的软件有ATS，varnish和squid三款，以前博客写了一篇关于varnish的博文，参考：如何建立Varnish CDN集群 ，使用Varnish从内存加速你的WordPress网站，今天用ansible的playbook功能批量部署ATS缓存（四台小鸡） 参考：https://qing.s&hellip;</p>
-
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-header">
-                        <div style="font-size: 1em;color:#999;">
-                            <span class="mb-2" id="avator_css"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/auth_logo.jpg">&nbsp;&nbsp; </span> <span class="mb-2"><i class="fa fa-clock-o"></i>&nbsp;&nbsp; 2020年07月25日</span>
-                            <span class="mb-2 ml-3"><i class="fa fa-eye"></i>&nbsp;&nbsp;阅读 1,003 次&nbsp;&nbsp;</span>
-
-                            <span class="mb-2 ml-3"><i class="fa fa-comment-o"></i>&nbsp;&nbsp;<a href="https://www.kaifashuo.com/2194.html#respond">0</a> 评论</span>
-
-                            <span class="mb-2 float-right"><i class="fa fa-tag"></i>&nbsp;&nbsp;Tags: <a href="https://www.kaifashuo.com/tag/ats" rel="tag">ats</a> · <a href="https://www.kaifashuo.com/tag/cdn" rel="tag">CDN</a></span>                        </div>
-                    </div>
-
-
-                </div>
-
-            
-        
-        
-        <div class="pagination mb-4">
-
-
-            <ul>
-                <li><a href=https://www.kaifashuo.com/  class="current">首 页</a></li><li></li><li><a href='https://www.kaifashuo.com/' class='current'>1</a></li><li><a href='https://www.kaifashuo.com/page/2'>2</a></li><li><a href='https://www.kaifashuo.com/page/3'>3</a></li><li><a href='https://www.kaifashuo.com/page/4'>4</a></li><li><a href='https://www.kaifashuo.com/page/5'>5</a></li><li><a href="https://www.kaifashuo.com/page/2" >下一页</a></li><li><a href=https://www.kaifashuo.com/page/13  class="current">尾 页</a></li><li style="float:right;"><span  class="current">第 1 页 / 共 13 页</span></li>            </ul>
-        </div>
-
-
-
-
-    </div>
-
-    <div class="col-xs-12 col-md-3">
-        <!---文章页边栏AD1---->
-<div class="col-xs-12 col-md-12" style="margin:0px;padding:0px;">
-
-    <div class="card mb-4 box-shadow">
-
-
-        <div class="card-header">
-
-            <h6>本站CDN由CdnTiger提供</h6>
-
-        </div>
-
-        <div class="card-body">
-            <div class="row  mt-2">
-                <div class="col-xs-12 col-md-12">
-
-                    <div><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/cdntiger.png" width="100%" height="150"></div>
-
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-
-    <div class="card mb-4 box-shadow">
-
-
-        <div class="card-header">
-
-            <h6>本站DNS解析由FoundDNS提供</h6>
-
-        </div>
-
-
-        <div class="card-body">
-            <div class="row  mt-2">
-                <div class="col-xs-12 col-md-12">
-
-                    <div><a href="/dns"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/toydns-logo.png" width="100%" height="150"></a></div>
-
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-
-
-    <div class="card mb-4 box-shadow">
-
-
-        <div class="card-header">
-
-            <h6>热门文章</h6>
-
-        </div>
-
-
-        <div class="card-body">
-            <div class="row  mt-2">
-                <div class="col-xs-12 col-md-12">
-
-                                            <li><a href="https://www.kaifashuo.com/1162.html">安装Zabbix监控服务器及邮件/短信/微信报警</a></li>
-                                            <li><a href="https://www.kaifashuo.com/1016.html">博客实现DDOS攻击秒级切换至高防服务器</a></li>
-                                            <li><a href="https://www.kaifashuo.com/56.html">VPS脚本自动备份数据到Dropbox</a></li>
-                                            <li><a href="https://www.kaifashuo.com/2337.html">Hadoop集群安装</a></li>
-                                            <li><a href="https://www.kaifashuo.com/2325.html">Centos服务器性能瓶颈定位分析【硬件篇】</a></li>
-                                            <li><a href="https://www.kaifashuo.com/2322.html">Kafka-3.1.0集群搭建(Kraft模式)</a></li>
-                                            <li><a href="https://www.kaifashuo.com/2319.html">MySQL升级报错解决办法</a></li>
-                                            <li><a href="https://www.kaifashuo.com/2312.html">Debian11配置静态IPV6地址与apt包管理工具使用</a></li>
-                                            <li><a href="https://www.kaifashuo.com/2310.html">使用Dockerfile定制ATS的docker镜像</a></li>
-                                            <li><a href="https://www.kaifashuo.com/2287.html">kafka分布式消息队列部署</a></li>
-                                            <li><a href="https://www.kaifashuo.com/2284.html">zookeeper单机和集群部署</a></li>
-                                                        </div>
-            </div>
-        </div>
-
-
-    </div>
-
-
-    <!---文章页边栏AD2---->
-
-    <div class="col-xs-12 col-md-12" style="margin:0px;padding:0px;">
-
-
-        <div class="card mb-4 box-shadow">
-
-
-            <div class="card-header">
-
-                <h6>域名展示</h6>
-
-            </div>
-
-            <div class="card-body">
-                <div class="row  mt-2">
-                    <div class="col-xs-12 col-md-12">
-
-                        <div class="mt-2"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/d1.png" width="100%"></div>
-                        <br />
-                        <div class="mt-2"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/d2.png" width="100%"></div>
-
-
-                    </div>
-                </div>
-            </div>
-
-
-        </div>
-
-
-        <div class="card mb-4 box-shadow">
-
-
-            <div class="card-header">
-
-                <h6>域名展示</h6>
-
-            </div>
-
-
-
-            <div class="card-body">
-                <div class="row  mt-2">
-                    <div class="col-xs-12 col-md-12">
-
-                        <div class="mt-2"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/d3.png" width="100%"></div>
-                        <br />
-                        <div class="mt-2"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/d4.png" width="100%"></div>
-
-
-                    </div>
-                </div>
-            </div>
-
-
-        </div>
-
-
-
-        <div class="card mb-4 box-shadow">
-
-
-            <div class="card-header">
-
-                <h6>标签云</h6>
-
-            </div>
-
-            <div class="card-body">
-                <div class="row  mt-2">
-                    <div class="col-xs-12 col-md-12">
-
-                        <a href="https://www.kaifashuo.com/tag/%e9%97%b2%e8%a8%80%e7%a2%8e%e8%af%ad" class="tag-cloud-link tag-link-45 tag-link-position-1" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">闲言碎语</a>
-<a href="https://www.kaifashuo.com/tag/%e8%bd%ac%e8%bd%bd" class="tag-cloud-link tag-link-33 tag-link-position-2" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F99; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">转载</a>
-<a href="https://www.kaifashuo.com/tag/%e8%84%9a%e6%9c%ac" class="tag-cloud-link tag-link-37 tag-link-position-3" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F99; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">脚本</a>
-<a href="https://www.kaifashuo.com/tag/%e7%ac%94%e8%ae%b0" class="tag-cloud-link tag-link-15 tag-link-position-4" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F99; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">笔记</a>
-<a href="https://www.kaifashuo.com/tag/%e7%9f%a5%e8%af%86%e7%82%b9" class="tag-cloud-link tag-link-17 tag-link-position-5" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #C9C; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">知识点</a>
-<a href="https://www.kaifashuo.com/tag/%e7%8b%ac%e6%9c%8d%e4%bc%98%e6%83%a0" class="tag-cloud-link tag-link-64 tag-link-position-6" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">独服优惠</a>
-<a href="https://www.kaifashuo.com/tag/%e6%bf%80%e6%b4%bb%e8%bd%af%e4%bb%b6" class="tag-cloud-link tag-link-22 tag-link-position-7" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6CC; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">激活软件</a>
-<a href="https://www.kaifashuo.com/tag/%e6%9d%82%e8%ae%b0" class="tag-cloud-link tag-link-28 tag-link-position-8" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">杂记</a>
-<a href="https://www.kaifashuo.com/tag/%e6%9d%80%e6%af%92" class="tag-cloud-link tag-link-25 tag-link-position-9" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #B0D686; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">杀毒</a>
-<a href="https://www.kaifashuo.com/tag/%e6%9c%8d%e5%8a%a1%e5%99%a8" class="tag-cloud-link tag-link-7 tag-link-position-10" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #C9C; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">服务器</a>
-<a href="https://www.kaifashuo.com/tag/%e6%97%85%e6%b8%b8" class="tag-cloud-link tag-link-39 tag-link-position-11" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6C9; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">旅游</a>
-<a href="https://www.kaifashuo.com/tag/%e6%95%b0%e6%8d%ae%e5%ba%93" class="tag-cloud-link tag-link-26 tag-link-position-12" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F99; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">数据库</a>
-<a href="https://www.kaifashuo.com/tag/%e6%95%99%e7%a8%8b" class="tag-cloud-link tag-link-14 tag-link-position-13" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6C9; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">教程</a>
-<a href="https://www.kaifashuo.com/tag/%e6%8a%a5%e9%94%99" class="tag-cloud-link tag-link-42 tag-link-position-14" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">报错</a>
-<a href="https://www.kaifashuo.com/tag/%e6%8a%80%e6%9c%af%e5%b9%b2%e8%b4%a7" class="tag-cloud-link tag-link-46 tag-link-position-15" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #C9C; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">技术干货</a>
-<a href="https://www.kaifashuo.com/tag/%e5%be%b7%e5%9b%bd" class="tag-cloud-link tag-link-57 tag-link-position-16" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #C9C; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">德国</a>
-<a href="https://www.kaifashuo.com/tag/%e5%ae%89%e5%8d%93" class="tag-cloud-link tag-link-23 tag-link-position-17" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6C9; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">安卓</a>
-<a href="https://www.kaifashuo.com/tag/%e5%ae%89%e5%85%a8" class="tag-cloud-link tag-link-12 tag-link-position-18" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">安全</a>
-<a href="https://www.kaifashuo.com/tag/%e5%a4%a7%e6%95%b0%e6%8d%ae" class="tag-cloud-link tag-link-100 tag-link-position-19" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6CC; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">大数据</a>
-<a href="https://www.kaifashuo.com/tag/%e5%9f%9f%e5%90%8d" class="tag-cloud-link tag-link-24 tag-link-position-20" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">域名</a>
-<a href="https://www.kaifashuo.com/tag/%e5%90%90%e6%a7%bd" class="tag-cloud-link tag-link-31 tag-link-position-21" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #C9C; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">吐槽</a>
-<a href="https://www.kaifashuo.com/tag/%e5%88%86%e4%ba%ab" class="tag-cloud-link tag-link-30 tag-link-position-22" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6CC; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">分享</a>
-<a href="https://www.kaifashuo.com/tag/%e4%bc%98%e5%8c%96" class="tag-cloud-link tag-link-13 tag-link-position-23" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6C9; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">优化</a>
-<a href="https://www.kaifashuo.com/tag/%e4%bb%a3%e7%a0%81" class="tag-cloud-link tag-link-11 tag-link-position-24" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6CC; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">代码</a>
-<a href="https://www.kaifashuo.com/tag/zabbix" class="tag-cloud-link tag-link-73 tag-link-position-25" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F96; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">zabbix</a>
-<a href="https://www.kaifashuo.com/tag/windows10" class="tag-cloud-link tag-link-21 tag-link-position-26" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #B0D686; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">windows10</a>
-<a href="https://www.kaifashuo.com/tag/windows" class="tag-cloud-link tag-link-20 tag-link-position-27" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #B0D686; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">windows</a>
-<a href="https://www.kaifashuo.com/tag/vscode" class="tag-cloud-link tag-link-89 tag-link-position-28" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F96; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">vscode</a>
-<a href="https://www.kaifashuo.com/tag/vps%e4%bc%98%e6%83%a0" class="tag-cloud-link tag-link-60 tag-link-position-29" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #B0D686; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">vps优惠</a>
-<a href="https://www.kaifashuo.com/tag/vps" class="tag-cloud-link tag-link-47 tag-link-position-30" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #B0D686; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">VPS</a>
-<a href="https://www.kaifashuo.com/tag/voxility" class="tag-cloud-link tag-link-58 tag-link-position-31" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #C9C; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">Voxility</a>
-<a href="https://www.kaifashuo.com/tag/ssl" class="tag-cloud-link tag-link-16 tag-link-position-32" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F99; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">ssl</a>
-<a href="https://www.kaifashuo.com/tag/php" class="tag-cloud-link tag-link-29 tag-link-position-33" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">PHP</a>
-<a href="https://www.kaifashuo.com/tag/ovh" class="tag-cloud-link tag-link-66 tag-link-position-34" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #37A7FF; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">OVH</a>
-<a href="https://www.kaifashuo.com/tag/oracle" class="tag-cloud-link tag-link-86 tag-link-position-35" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #C9C; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">oracle</a>
-<a href="https://www.kaifashuo.com/tag/mysql" class="tag-cloud-link tag-link-27 tag-link-position-36" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">mysql</a>
-<a href="https://www.kaifashuo.com/tag/lnmp" class="tag-cloud-link tag-link-9 tag-link-position-37" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">LNMP</a>
-<a href="https://www.kaifashuo.com/tag/kms" class="tag-cloud-link tag-link-19 tag-link-position-38" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #37A7FF; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">KMS</a>
-<a href="https://www.kaifashuo.com/tag/kernel" class="tag-cloud-link tag-link-76 tag-link-position-39" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F96; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">kernel</a>
-<a href="https://www.kaifashuo.com/tag/kafka" class="tag-cloud-link tag-link-122 tag-link-position-40" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #C9C; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">kafka</a>
-<a href="https://www.kaifashuo.com/tag/gt-host" class="tag-cloud-link tag-link-56 tag-link-position-41" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6C9; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">gt-host</a>
-<a href="https://www.kaifashuo.com/tag/go%e8%af%ad%e8%a8%80" class="tag-cloud-link tag-link-88 tag-link-position-42" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6CC; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">go语言</a>
-<a href="https://www.kaifashuo.com/tag/docker" class="tag-cloud-link tag-link-93 tag-link-position-43" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #37A7FF; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">docker</a>
-<a href="https://www.kaifashuo.com/tag/dns" class="tag-cloud-link tag-link-68 tag-link-position-44" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F96; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">dns</a>
-<a href="https://www.kaifashuo.com/tag/cloudcone" class="tag-cloud-link tag-link-49 tag-link-position-45" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6C9; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">cloudcone</a>
-<a href="https://www.kaifashuo.com/tag/centos" class="tag-cloud-link tag-link-82 tag-link-position-46" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F99; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">centos</a>
-<a href="https://www.kaifashuo.com/tag/cdn" class="tag-cloud-link tag-link-59 tag-link-position-47" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #6C9; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">CDN</a>
-<a href="https://www.kaifashuo.com/tag/bbr" class="tag-cloud-link tag-link-77 tag-link-position-48" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #E6CC6E; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">bbr</a>
-<a href="https://www.kaifashuo.com/tag/ats" class="tag-cloud-link tag-link-96 tag-link-position-49" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #C9C; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">ats</a>
-<a href="https://www.kaifashuo.com/tag/android" class="tag-cloud-link tag-link-10 tag-link-position-50" style="display: inline-block; *display: inline; *zoom: 1; color: #fff; padding: 1px 5px; margin: 0 5px 5px 0; background-color: #F99; border-radius: 3px; -webkit-transition: background-color .4s linear; -moz-transition: background-color .4s linear; transition: background-color .4s linear;">Android</a>
-                    </div>
-                </div>
-            </div>
-
-
-        </div>
-
-
-        <!---文章页边栏AD3---->
-
-        <div class="col-xs-12 col-md-12" style="margin:0px;padding:0px;">
-
-
-            <div class="card mb-4 box-shadow">
-
-
-                <div class="card-header">
-
-                    <h6>域名展示</h6>
-
-                </div>
-
-
-
-                <div class="card-body">
-                    <div class="row  mt-2">
-                        <div class="col-xs-12 col-md-12">
-
-                            <div class="mt-2"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/d5.png" width="100%"></div>
-
-                            <br />
-                            <div class="mt-2"><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/d6.png" width="100%"></div>
-
-
-                        </div>
-                    </div>
-                </div>
-
-
-            </div>
-
-        </div><!-- end #sidebar -->
-    </div><!-- end #main-->
-
-</div>
-</div>
-    </div>
-
-    </div><!-- end container -->
-
-<div class="mt-4 pb-4 bg-dark">
-    <div class="fixed-btn">
-        <a class="go-top" target="_self" href="#back_top" title="返回顶部" style="display: inline-block;background-color: #45B6F7;">
-            <i class="fa fa-angle-up" style="color:white;"></i>
-        </a>
-    </div>
-
-
-
-    <footer class="container">
-
-        <div class="row">
-
-            <div class="col-xs-12 col-md-3 mt-2 mb-4">
-                <p><img src="https://www.kaifashuo.com/wp-content/uploads/static/images/cdntiger-logo.png" width="250px" height="100px"></p>
-
-            </div>
-
-            <div class="col-xs-12 col-md-6 mt-4 mb-2">
-                <h5 class="text-white">网站声明</h5>
-                <br>
-                <p class="text-white">开发说博客建立于2016年，主要以香港、美国等国外VPS信息发布为主，还包括少量独立服务器优惠信息。本站仅做资料收集，不对商家任何信息及交易做信用担保，有交易纠纷请自行解决。</p>
-
-            </div>
-
-
-            <div class="col-xs-12 col-md-3 mt-4 mb-2">
-                <h5 class="text-white">技术支持</h5>
-                <br>
-                <p class="text-white">© 2016 - 2022 Copyright 开发说，Powered by WordPress，Theme by WPCard，<a href="/sitemap.xml" class="text-white">Sitemap</a>。
-
-                </p>
-
-
-
-                <div class="friendlink text-xs  mt-2 pt-2 mb-4">
-                    <span class="text-white">友链:</span>
-                    <a class=" text-white px-2" target="_blank" href="https://www.moeelf.com/">萌精灵</a>
-                    <a class=" text-white px-2" target="_blank" href="https://qing.su/">香菇肥牛</a>
-							  <a class=" text-white px-2" target="_blank" href="https://www.lvsongfeng.com/">远忘</a>
-                </div>
-            </div>
-
-        </div>
-
-
-
-
-    </footer><!-- end #footer -->
-
-    <script type="text/javascript">
-        $(function() {
-            $("img").lazyload({
-                effect: "fadeIn"
-            });
-        });
-    </script>
-
-</div>
-
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/jQuery/jquery.min.js' id='jQuery-CDN-js'></script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/KaTeX/katex.min.js' id='Katex-js'></script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Emojify.js/js/emojify.min.js' id='Emojify.js-js'></script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/ClipBoard/clipboard.min.js' id='copy-clipboard-js'></script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/components/prism-core.min.js' id='prism-core-js-js'></script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/plugins/autoloader/prism-autoloader.min.js' id='prism-plugin-autoloader-js'></script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/plugins/toolbar/prism-toolbar.min.js' id='prism-plugin-toolbar-js'></script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/plugins/line-numbers/prism-line-numbers.min.js' id='prism-plugin-line-numbers-js'></script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/plugins/show-language/prism-show-language.min.js' id='prism-plugin-show-language-js'></script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js' id='prism-plugin-copy-to-clipboard-js'></script>
-<script type='text/javascript' id='Front_Style-js-extra'>
-/* <![CDATA[ */
-var FrontStyle = {"openLinkInNewTab":"on"};
-/* ]]> */
-</script>
-<script type='text/javascript' src='https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/FrontStyle/frontstyle.min.js' id='Front_Style-js'></script>
-        <script type="text/javascript">
-            (function ($) {
-                $(document).ready(function () {
-                    $(".katex.math.inline").each(function () {
-                        var parent = $(this).parent()[0];
-                        if (parent.localName !== "code") {
-                            var texTxt = $(this).text();
-                            var el = $(this).get(0);
-                            try {
-                                katex.render(texTxt, el);
-                            } catch (err) {
-                                $(this).html("<span class=\"err\">" + err);
-                            }
-                        } else {
-                            $(this).parent().text($(this).parent().text());
-                        }
-                    });
-                    $(".katex.math.multi-line").each(function () {
-                        var texTxt = $(this).text();
-                        var el = $(this).get(0);
-                        try {
-                            katex.render(texTxt, el, {displayMode: true})
-                        } catch (err) {
-                            $(this).html("<span class=\"err\">" + err)
-                        }
-                    });
-                })
-            })(jQuery);
-        </script>
-                <script type="text/javascript">
-            window.onload = function () {
-                emojify.setConfig({
-                    img_dir: "https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Emojify.js/images/basic",//前端emoji资源地址
-                    blacklist: {
-                        "ids": [],
-                        "classes": ["no-emojify"],
-                        "elements": ["^script$", "^textarea$", "^pre$", "^code$"]
-                    }
-                });
-                emojify.run();
-            }
-        </script>
-                <script type="text/javascript">
-            Prism.plugins.autoloader.languages_path = "https://cdn.jsdelivr.net/wp/wp-editormd/tags/10.2.1/assets/Prism.js/components/";
-        </script>
-        
-
-</body>
-
-</html>
+- MapReduce测试
+
+  ```bash
+  # 利用Hadoop自带的测试用例测试 pi 圆周率
+  cd  /data/hadoop-3.3.1/share/hadoop/mapreduce
+  
+  # MapReduce测试命令：
+  hadoop jar hadoop-mapreduce-examples-3.3.1.jar  pi 10  10 
+  ```
+
+- namenode HA 故障转移测试
+
+  ```bash
+  # 查看namenode的状态：
+  [root@k8s-node1 home]# hdfs haadmin -getServiceState nn1
+  active
+  [root@k8s-node1 home]# hdfs haadmin -getServiceState nn2
+  standby
+  
+  [root@hadoop1]# hdfs --daemon start namenode 【杀掉主namenode的进程】
+  
+  # 查看从namenode的状态
+  [root@k8s-node1 home]# hdfs haadmin -getServiceState nn2
+  active
+  
+  # 启动namenode进程
+  
+  hdfs --daemon start namenode
+  
+  [root@k8s-node1 home]# hdfs haadmin -getServiceState nn1
+  standby
+  ```
+
+- yarn  HA 故障转移测试
+
+  ```bash
+  # 查看yarn的resourcemanager状态
+  [root@hadoop1]# yarn rmadmin -getServiceState rm1
+  active
+  [root@hadoop1]# yarn rmadmin -getServiceState rm2
+  standby
+  
+  # 停止“active”主机的 resourcemanager：
+  yarn --daemon stop resourcemanager
+  
+  # 查看yarn的resourcemanager状态
+  [root@hadoop1]# yarn rmadmin -getServiceState rm2
+  active
+  
+  # 启动resourcemanager
+  
+  [root@hadoop1]# yarn --daemon start resourcemanager
+  [root@hadoop1]# yarn rmadmin -getServiceState rm1
+  standby
+  
+  
+  ```
+
+  
+
+### 10、Hadoop WEB页面访问
+
+```bash
+# 1、hdfs WEB界面访问地址：http://172.16.1.210:9870
+# 2、yarn WEB界面访问地址：http://172.16.1.210:8088
+
+
+feiyu:1OqFKWaY0AIRWwVf
+```
+
+### 11、优化相关
+
+- hdfs数据块大小设置依据【数据块的大小主要影响寻址】，生产建议3副本.
+
+- hdfs块大小参考设置
+
+  | 磁盘读写     | hdfs数据块大小设置 |
+  | ------------ | ------------------ |
+  | 100MB/S      | 128M               |
+  | 200-300MB/s  | 256M               |
+  | 400-1000MB/s | 512M               |
+
+  
+
+### 附录：
+
+1、Hadoop生态圈介绍：https://blog.csdn.net/yue_2018/article/details/89084266
+
+2、Hadoop相关服务端口：https://blog.csdn.net/qq_31454379/article/details/105439752
+
+3、服务器端口与各配置文件参数详解：https://www.cnblogs.com/yoyo1216/p/12848926.html
