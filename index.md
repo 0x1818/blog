@@ -30,7 +30,7 @@
 
 ### 2、服务器免密配置
 
-```bash
+
 # 生成ssh 密钥对,一路回车，不输入密码
 [root@hadoop1 ~]# ssh-keygen -t rsa
 
@@ -62,11 +62,11 @@ export PATH=$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$PATH
 export HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib:$HADOOP_HOME/lib/native"
 
 source /etc/profile
-```
+
 
 ### 3、安装JDK
 
-```bash
+
 # 此软件会提供jps命令，如果不确定什么软件包可提供此命令，可以使用yum provides jps或yum provides */jps
 yum install java-1.8.0-openjdk-devel -y
 
@@ -78,7 +78,7 @@ java -version
 # 安装psmisc，因为namenode仲裁时需要用到sshfence，所以此软件的fuser配合。
 
 yum -y install psmisc
-```
+
 
 
 
